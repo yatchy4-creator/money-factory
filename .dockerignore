@@ -1,0 +1,12 @@
+.git
+.gitignore
+**/node_modules
+**/.env
+**/.env.*
+!.env.example
+*.log
+README.md
+*.md
+website
+scripts
+mvp/frontend
