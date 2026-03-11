@@ -25,6 +25,11 @@ app.use('/api/leads', leadsRouter);
 app.use('/api/billing', billingRouter);
 
 app.use((err, req, res, next) => {
+  if (err?.type === 'entity.parse.failed') {
+    logger.warn('bad_json_payload', { error: err.message });
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+
   logger.error('unhandled_error', { error: err.message });
   res.status(500).json({ error: 'Internal error' });
 });
