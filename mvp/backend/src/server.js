@@ -10,9 +10,12 @@ const PORT = Number(process.env.PORT || 8080);
 
 app.use(cors());
 
-// NOTE: keep JSON parser before non-webhook routes
-app.use('/api/billing/webhook', (req, res, next) => next());
-app.use(express.json({ limit: '1mb' }));
+const jsonParser = express.json({ limit: '1mb' });
+// Stripe signature verification needs raw body; skip JSON parser on webhook route.
+app.use((req, res, next) => {
+  if (req.originalUrl.startsWith('/api/billing/webhook')) return next();
+  return jsonParser(req, res, next);
+});
 
 app.get('/health', (req, res) => {
   res.json({ ok: true, uptime: process.uptime(), env: process.env.NODE_ENV || 'development' });

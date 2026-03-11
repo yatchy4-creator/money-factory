@@ -5,15 +5,93 @@ import { db } from '../data/store.js';
 
 export const billingRouter = express.Router();
 
+const PLAN_TO_PRICE_ENV = {
+  starter: 'STRIPE_PRICE_STARTER',
+  growth: 'STRIPE_PRICE_GROWTH',
+  pro: 'STRIPE_PRICE_PRO'
+};
+
+const PLAN_ALIASES = {
+  starter: 'starter',
+  basic: 'starter',
+  growth: 'growth',
+  grow: 'growth',
+  pro: 'pro',
+  professional: 'pro',
+  premium: 'pro'
+};
+
+function normalizePlan(plan) {
+  if (typeof plan !== 'string') return null;
+  const value = plan.trim().toLowerCase();
+  return PLAN_ALIASES[value] || null;
+}
+
+function resolveCheckoutPriceId(body) {
+  if (typeof body?.priceId === 'string' && body.priceId.trim()) {
+    return { priceId: body.priceId.trim(), source: 'priceId' };
+  }
+
+  const normalizedPlan = normalizePlan(body?.plan ?? body?.tier);
+  if (!normalizedPlan) {
+    return { priceId: null, source: null };
+  }
+
+  const envKey = PLAN_TO_PRICE_ENV[normalizedPlan];
+  const envPrice = process.env[envKey];
+  return {
+    priceId: typeof envPrice === 'string' && envPrice.trim() ? envPrice.trim() : null,
+    source: `plan:${normalizedPlan}`,
+    plan: normalizedPlan,
+    envKey
+  };
+}
+
+function getAppBaseUrl(req) {
+  if (typeof process.env.APP_BASE_URL === 'string' && process.env.APP_BASE_URL.trim()) {
+    return process.env.APP_BASE_URL.trim();
+  }
+
+  if (typeof req.headers.origin === 'string' && req.headers.origin.trim()) {
+    return req.headers.origin.trim();
+  }
+
+  return null;
+}
+
 billingRouter.post('/checkout', async (req, res) => {
   try {
-    const { email, priceId } = req.body;
+    const appBaseUrl = getAppBaseUrl(req);
+    if (!appBaseUrl) {
+      logger.error('checkout_failed', { reason: 'missing_app_base_url' });
+      return res.status(503).json({ error: 'Checkout is temporarily unavailable' });
+    }
+
+    const { priceId, source, plan, envKey } = resolveCheckoutPriceId(req.body);
+    if (!priceId) {
+      logger.warn('checkout_validation_failed', {
+        reason: 'missing_price_id',
+        source,
+        plan,
+        envKey
+      });
+      return res.status(400).json({
+        error: 'Missing Stripe price configuration',
+        details: 'Provide priceId or plan (starter, growth, pro)'
+      });
+    }
+
+    const email =
+      typeof req.body?.email === 'string' && req.body.email.trim() ? req.body.email.trim() : undefined;
+
     const session = await createCheckoutSession({
       customerEmail: email,
       priceId,
-      successUrl: `${process.env.APP_BASE_URL}/billing/success`,
-      cancelUrl: `${process.env.APP_BASE_URL}/billing/cancel`
+      successUrl: `${appBaseUrl}/billing/success`,
+      cancelUrl: `${appBaseUrl}/billing/cancel`
     });
+
+    logger.info('checkout_created', { source, plan, hasEmail: Boolean(email) });
     res.json({ url: session.url });
   } catch (error) {
     logger.error('checkout_failed', { error: error.message });

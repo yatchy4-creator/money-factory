@@ -7,6 +7,26 @@
 - `POST /api/billing/checkout`
 - `POST /api/billing/webhook`
 
+## Checkout payloads
+Use either a direct Stripe price ID or a plan key that maps to environment variables.
+
+```json
+{
+  "email": "owner@example.com",
+  "priceId": "price_123"
+}
+```
+
+```json
+{
+  "email": "owner@example.com",
+  "plan": "starter"
+}
+```
+
+Plan keys supported: `starter`, `growth`, `pro`.
+Required env vars for plan mapping: `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_PRICE_PRO`.
+
 ## Example lead payload
 ```json
 {
